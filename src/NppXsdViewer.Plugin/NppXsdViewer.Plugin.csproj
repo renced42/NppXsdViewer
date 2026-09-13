@@ -1,0 +1,89 @@
+<Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">x64</Platform>
+    <ProjectGuid>{09A5812F-E804-47CE-99F0-5DA52DFB8A63}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>NppXsdViewer.Plugin</RootNamespace>
+    <AssemblyName>NppXsdViewer</AssemblyName>
+    <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <LangVersion>latest</LangVersion>
+    <FileAlignment>512</FileAlignment>
+    <RestorePackagesPath>$(MSBuildProjectDirectory)\packages</RestorePackagesPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x64' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug-x64\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release-x64\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="UnmanagedExports.Repack.Upgrade" Version="1.2.1" GeneratePathProperty="true">
+      <ExcludeAssets>all</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="PluginHost.cs" />
+    <Compile Include="PluginInfrastructure\DllExport\DllExportAttribute.cs" />
+    <Compile Include="PluginInfrastructure\AssemblyResolver.cs" />
+    <Compile Include="PluginInfrastructure\PluginInterop.cs" />
+    <Compile Include="PluginInfrastructure\XmlSourceSpanFinder.cs" />
+    <Compile Include="PluginInfrastructure\UnmanagedExports.cs" />
+    <Compile Include="UI\XsdViewerForm.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NppXsdViewer.Schema\NppXsdViewer.Schema.csproj">
+      <Project>{B4CE7195-83D4-46AC-9F23-4B4E90BF2E33}</Project>
+      <Name>NppXsdViewer.Schema</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NppXsdViewer.Diagram\NppXsdViewer.Diagram.csproj">
+      <Project>{C7984D1B-8F62-46C0-91D2-B9B2C1442D20}</Project>
+      <Name>NppXsdViewer.Diagram</Name>
+    </ProjectReference>
+  </ItemGroup>
+
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <Import Condition="Exists($(PkgUnmanagedExports_Repack_Upgrade))" Project="$(PkgUnmanagedExports_Repack_Upgrade)\build\UnmanagedExports.Repack.Upgrade.targets" />
+
+  <Target Name="CreateNotepadPluginDistribution" AfterTargets="Build">
+    <PropertyGroup>
+      <PluginDistributionDir>$(MSBuildProjectDirectory)\..\..\dist\NppXsdViewer</PluginDistributionDir>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PluginDistributionFiles Include="$(TargetPath)" />
+      <PluginDistributionFiles Include="$(TargetDir)NppXsdViewer.Schema.dll" />
+      <PluginDistributionFiles Include="$(TargetDir)NppXsdViewer.Diagram.dll" />
+    </ItemGroup>
+
+    <RemoveDir Directories="$(PluginDistributionDir)" Condition="Exists('$(PluginDistributionDir)')" />
+    <MakeDir Directories="$(PluginDistributionDir)" />
+    <Copy SourceFiles="@(PluginDistributionFiles)" DestinationFolder="$(PluginDistributionDir)" SkipUnchangedFiles="true" />
+
+    <Message Importance="high" Text="Notepad++ plugin distribution: $(PluginDistributionDir)" />
+  </Target>
+</Project>

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:example:invoice"
+           xmlns:tns="urn:example:invoice"
+           elementFormDefault="qualified">
+  <xs:element name="Invoice" type="tns:InvoiceType"/>
+
+  <xs:complexType name="InvoiceType">
+    <xs:sequence>
+      <xs:element name="invoiceNumber" type="xs:string"/>
+      <xs:element name="issueDate" type="xs:date"/>
+      <xs:element name="customer" type="tns:CustomerType"/>
+      <xs:element name="items" type="tns:InvoiceItemType" minOccurs="1" maxOccurs="unbounded"/>
+    </xs:sequence>
+    <xs:attribute name="currency" type="tns:CurrencyType" use="required"/>
+  </xs:complexType>
+
+  <xs:complexType name="CustomerType">
+    <xs:sequence>
+      <xs:element name="name" type="xs:string"/>
+      <xs:element name="taxNumber" type="xs:string" minOccurs="0"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="InvoiceItemType">
+    <xs:sequence>
+      <xs:element name="description" type="xs:string"/>
+      <xs:element name="quantity" type="xs:decimal"/>
+      <xs:element name="unitPrice" type="xs:decimal"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:simpleType name="CurrencyType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="HUF"/>
+      <xs:enumeration value="EUR"/>
+      <xs:enumeration value="USD"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>

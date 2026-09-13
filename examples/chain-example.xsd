@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:chain" xmlns:tns="urn:chain" elementFormDefault="qualified">
+  <xs:simpleType name="CodeType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[A-Z]{2}[0-9]{4}"/>
+      <xs:minLength value="6"/>
+      <xs:maxLength value="6"/>
+      <xs:enumeration value="AB1234"/>
+      <xs:enumeration value="CD5678"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:complexType name="FieldGroupType">
+    <xs:sequence>
+      <xs:element name="code" type="tns:CodeType"/>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:complexType name="ChainType">
+    <xs:sequence>
+      <xs:element name="Chain_elem" minOccurs="0" maxOccurs="99">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="FieldGroup" type="tns:FieldGroupType"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+
+  <xs:element name="Root">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Chain" type="tns:ChainType"/>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
