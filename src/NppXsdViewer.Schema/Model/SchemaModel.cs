@@ -11,6 +11,7 @@ public sealed class SchemaModel
     public IReadOnlyDictionary<string, SchemaTypeModel> Types { get; set; } = new Dictionary<string, SchemaTypeModel>();
     public IReadOnlyList<string> LoadedSchemas { get; set; } = Array.Empty<string>();
     public IReadOnlyList<SchemaComponentModel> Components { get; set; } = Array.Empty<SchemaComponentModel>();
+    public IReadOnlyList<SchemaComponentModel> SearchElements { get; set; } = Array.Empty<SchemaComponentModel>();
     public IReadOnlyList<SchemaDependencyModel> Dependencies { get; set; } = Array.Empty<SchemaDependencyModel>();
     public IReadOnlyList<SchemaDiagnosticModel> Diagnostics { get; set; } = Array.Empty<SchemaDiagnosticModel>();
     public IReadOnlyList<SchemaReferenceModel> References { get; set; } = Array.Empty<SchemaReferenceModel>();
@@ -75,6 +76,9 @@ public sealed class SchemaComponentModel
     public string Documentation { get; set; } = string.Empty;
     public string SourceUri { get; set; } = string.Empty;
     public int? SourceLine { get; set; }
+    public string RootElementName { get; set; } = string.Empty;
+    public string SchemaPath { get; set; } = string.Empty;
+    public bool IsNestedElement { get; set; }
 }
 
 public sealed class SchemaDependencyModel

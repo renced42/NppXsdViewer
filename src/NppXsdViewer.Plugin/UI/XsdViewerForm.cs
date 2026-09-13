@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using NppXsdViewer.Diagram;
@@ -53,7 +54,16 @@ internal sealed class XsdViewerForm : Form
         Visible = false
     };
 
-    private readonly TabControl propertyTabs = new TabControl { Dock = DockStyle.Fill };
+    private readonly FlowLayoutPanel propertyStack = new FlowLayoutPanel
+    {
+        Dock = DockStyle.Fill,
+        AutoScroll = true,
+        FlowDirection = FlowDirection.TopDown,
+        WrapContents = false,
+        Padding = new Padding(6)
+    };
+
+    private readonly List<PropertySection> propertySections = new List<PropertySection>();
     private readonly ListView generalView = CreatePropertyList();
     private readonly ListView patternView = CreateSingleValueList("Pattern");
     private readonly ListView enumView = CreateSingleValueList("Value");
@@ -107,9 +117,9 @@ internal sealed class XsdViewerForm : Form
         toolbar.Controls.Add(resetZoomButton);
         toolbar.Controls.Add(refreshButton);
 
-        ConfigurePropertyTabs();
+        ConfigurePropertySections();
         diagramSplit.Panel1.Controls.Add(diagram);
-        diagramSplit.Panel2.Controls.Add(propertyTabs);
+        diagramSplit.Panel2.Controls.Add(propertyStack);
         contentPanel.Controls.Add(diagramSplit);
         contentPanel.Controls.Add(overviewList);
 
@@ -146,7 +156,16 @@ internal sealed class XsdViewerForm : Form
             }
         };
 
-        componentTree.NodeMouseDoubleClick += (_, e) => OpenComponentNode(e.Node);
+        componentTree.NodeMouseDoubleClick += (_, e) =>
+        {
+            if (string.IsNullOrWhiteSpace(searchBox.Text))
+                OpenComponentNode(e.Node);
+        };
+        componentTree.NodeMouseClick += (_, e) =>
+        {
+            if (!string.IsNullOrWhiteSpace(searchBox.Text) && e.Node.Tag is SchemaComponentModel)
+                OpenComponentNode(e.Node);
+        };
         searchBox.TextChanged += (_, _) => PopulateComponentBrowser(searchBox.Text);
         overviewButton.Click += (_, _) => ShowOverview(true);
         refreshButton.Click += (_, _) => ReloadRequested?.Invoke(this, EventArgs.Empty);
@@ -163,7 +182,7 @@ internal sealed class XsdViewerForm : Form
             breadcrumbLabel.Text = e.SchemaPath;
         };
         diagram.TypeDefinitionRequested += (_, e) => OpenType(e.QualifiedTypeName, true);
-        diagramSplit.SizeChanged += (_, _) => AdjustPropertyPanelWidth();
+        diagramSplit.SizeChanged += (_, _) => { AdjustPropertyPanelWidth(); ResizePropertySections(); };
         mainSplit.SizeChanged += (_, _) => AdjustBrowserWidth();
 
         generalView.DoubleClick += (_, _) => OpenDefinitionFromGeneral();
@@ -188,6 +207,8 @@ internal sealed class XsdViewerForm : Form
 
         overviewList.Items.Clear();
         componentTree.Nodes.Clear();
+        dependencyTree.Nodes.Clear();
+        problemsView.Items.Clear();
         diagram.SetSchema(new SchemaModel(), null);
         ClearProperties();
         ShowOverview(false);
@@ -218,6 +239,7 @@ internal sealed class XsdViewerForm : Form
             PopulateOverview();
             PopulateDependencies();
             PopulateProblems();
+            RefreshPropertySectionVisibility();
             diagram.SetSchema(currentModel, null);
             ClearProperties();
             ShowOverview(false);
@@ -229,6 +251,8 @@ internal sealed class XsdViewerForm : Form
             currentModel = null;
             componentTree.Nodes.Clear();
             overviewList.Items.Clear();
+            dependencyTree.Nodes.Clear();
+            problemsView.Items.Clear();
             diagram.SetSchema(new SchemaModel(), null);
             ClearProperties();
             ShowOverview(false);
@@ -236,24 +260,65 @@ internal sealed class XsdViewerForm : Form
         }
     }
 
-    private void ConfigurePropertyTabs()
+    private void ConfigurePropertySections()
     {
-        propertyTabs.TabPages.Add(CreateTab("General", generalView));
-        propertyTabs.TabPages.Add(CreateTab("Pattern", patternView));
-        propertyTabs.TabPages.Add(CreateTab("Enumerations", enumView));
-        propertyTabs.TabPages.Add(CreateTab("Restrictions", facetView));
-        propertyTabs.TabPages.Add(CreateTab("Attributes", attributeView));
-        propertyTabs.TabPages.Add(CreateTab("Documentation", documentationBox));
-        propertyTabs.TabPages.Add(CreateTab("Used by", referencesView));
-        propertyTabs.TabPages.Add(CreateTab("Dependencies", dependencyTree));
-        propertyTabs.TabPages.Add(CreateTab("Problems", problemsView));
+        AddPropertySection("General", generalView, () => generalView.Items.Count > 0);
+        AddPropertySection("Pattern", patternView, () => patternView.Items.Count > 0);
+        AddPropertySection("Enumerations", enumView, () => enumView.Items.Count > 0);
+        AddPropertySection("Restrictions", facetView, () => facetView.Items.Count > 0);
+        AddPropertySection("Attributes", attributeView, () => attributeView.Items.Count > 0);
+        AddPropertySection("Documentation", documentationBox, () => !string.IsNullOrWhiteSpace(documentationBox.Text));
+        AddPropertySection("Used by", referencesView, () => referencesView.Items.Count > 0);
+        AddPropertySection("Dependencies", dependencyTree, () => dependencyTree.Nodes.Count > 0);
+        AddPropertySection("Problems", problemsView, () => problemsView.Items.Count > 0);
+
+        propertyStack.SizeChanged += (_, _) => ResizePropertySections();
     }
 
-    private static TabPage CreateTab(string title, Control control)
+    private void AddPropertySection(string title, Control content, Func<bool> hasContent)
     {
-        var tab = new TabPage(title);
-        tab.Controls.Add(control);
-        return tab;
+        var section = new PropertySection(title, content, hasContent);
+        section.LayoutStateChanged += (_, _) => ResizePropertySections();
+        propertySections.Add(section);
+        propertyStack.Controls.Add(section);
+    }
+
+    private void RefreshPropertySectionVisibility()
+    {
+        foreach (var section in propertySections)
+            section.RefreshVisibility();
+        ResizePropertySections();
+    }
+
+    private void ResizePropertySections()
+    {
+        if (propertyStack.IsDisposed) return;
+
+        var visibleSections = propertySections.Where(section => section.Visible).ToArray();
+        var width = Math.Max(180, propertyStack.ClientSize.Width - propertyStack.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth - 4);
+        foreach (var section in visibleSections)
+            section.Width = width;
+
+        var expandedSections = visibleSections.Where(section => section.IsExpanded).ToArray();
+        if (expandedSections.Length == 0) return;
+
+        var collapsedHeight = visibleSections
+            .Where(section => !section.IsExpanded)
+            .Sum(section => section.CollapsedHeight + section.Margin.Vertical);
+        var expandedMargins = expandedSections.Sum(section => section.Margin.Vertical);
+        var availableHeight = propertyStack.ClientSize.Height
+            - propertyStack.Padding.Vertical
+            - collapsedHeight
+            - expandedMargins
+            - 2;
+
+        var minimumRequired = expandedSections.Length * PropertySection.MinimumExpandedHeight;
+        var allocatedHeight = availableHeight >= minimumRequired
+            ? Math.Max(PropertySection.MinimumExpandedHeight, availableHeight / expandedSections.Length)
+            : PropertySection.MinimumExpandedHeight;
+
+        foreach (var section in expandedSections)
+            section.SetExpandedHeight(allocatedHeight);
     }
 
     private void PopulateComponentBrowser(string filter)
@@ -279,14 +344,27 @@ internal sealed class XsdViewerForm : Form
             foreach (var kind in groups)
             {
                 var root = new TreeNode(ComponentKindCaption(kind));
-                var matches = currentModel.Components
+                IEnumerable<SchemaComponentModel> source = currentModel.Components;
+                if (kind == SchemaComponentKind.Element && !string.IsNullOrWhiteSpace(filter))
+                    source = source.Concat(currentModel.SearchElements);
+
+                var matches = source
                     .Where(c => c.Kind == kind && MatchesSearch(c, filter))
+                    .GroupBy(c => c.IsNestedElement ? c.SchemaPath : c.QualifiedName + "|" + c.Name, StringComparer.Ordinal)
+                    .Select(g => g.First())
                     .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(c => c.SchemaPath, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 
                 foreach (var component in matches)
                 {
-                    var node = new TreeNode(component.Name) { Tag = component, ToolTipText = component.Documentation };
+                    var caption = component.IsNestedElement && !string.IsNullOrWhiteSpace(component.SchemaPath)
+                        ? component.Name + "  —  " + component.SchemaPath
+                        : component.Name;
+                    var tooltip = component.IsNestedElement && !string.IsNullOrWhiteSpace(component.SchemaPath)
+                        ? component.SchemaPath + Environment.NewLine + component.Documentation
+                        : component.Documentation;
+                    var node = new TreeNode(caption) { Tag = component, ToolTipText = tooltip };
                     root.Nodes.Add(node);
                 }
 
@@ -399,7 +477,10 @@ internal sealed class XsdViewerForm : Form
         switch (component.Kind)
         {
             case SchemaComponentKind.Element:
-                ShowElementDiagram(component.Name, addHistory);
+                if (component.IsNestedElement && !string.IsNullOrWhiteSpace(component.RootElementName))
+                    ShowSearchElement(component, addHistory);
+                else
+                    ShowElementDiagram(component.Name, addHistory);
                 break;
             case SchemaComponentKind.ComplexType:
             case SchemaComponentKind.SimpleType:
@@ -415,6 +496,21 @@ internal sealed class XsdViewerForm : Form
                 breadcrumbLabel.Text = ComponentKindCaption(component.Kind) + " > " + component.Name;
                 break;
         }
+    }
+
+
+    private void ShowSearchElement(SchemaComponentModel component, bool addHistory)
+    {
+        if (currentModel == null || string.IsNullOrWhiteSpace(component.RootElementName)) return;
+
+        ShowElementDiagram(component.RootElementName, false);
+        if (!string.IsNullOrWhiteSpace(component.SchemaPath))
+            diagram.RevealPath(component.SchemaPath, true);
+
+        breadcrumbLabel.Text = component.SchemaPath;
+        statusLabel.Text = component.SchemaPath + " · search result";
+        if (addHistory)
+            AddHistory(new NavigationEntry(NavigationKind.ElementPath, component.RootElementName + "|" + component.SchemaPath, component.SchemaPath));
     }
 
     private void ShowElementDiagram(string rootName, bool addHistory)
@@ -545,6 +641,8 @@ internal sealed class XsdViewerForm : Form
         documentationBox.Text = !string.IsNullOrWhiteSpace(element.Documentation)
             ? element.Documentation
             : type?.Documentation ?? string.Empty;
+
+        RefreshPropertySectionVisibility();
     }
 
     private void OpenDefinitionFromGeneral()
@@ -614,6 +712,18 @@ internal sealed class XsdViewerForm : Form
             var entry = history[target];
             if (entry.Kind == NavigationKind.Overview) ShowOverview(false);
             else if (entry.Kind == NavigationKind.Element) ShowElementDiagram(entry.Key, false);
+            else if (entry.Kind == NavigationKind.ElementPath)
+            {
+                var separator = entry.Key.IndexOf('|');
+                if (separator > 0)
+                {
+                    var rootName = entry.Key.Substring(0, separator);
+                    var schemaPath = entry.Key.Substring(separator + 1);
+                    ShowElementDiagram(rootName, false);
+                    diagram.RevealPath(schemaPath, true);
+                    breadcrumbLabel.Text = schemaPath;
+                }
+            }
             else if (entry.Kind == NavigationKind.Type) OpenType(entry.Key, false);
         }
         finally
@@ -638,6 +748,7 @@ internal sealed class XsdViewerForm : Form
         attributeView.Items.Clear();
         referencesView.Items.Clear();
         documentationBox.Clear();
+        RefreshPropertySectionVisibility();
     }
 
     private static void AddProperty(ListView view, string name, string value, object? tag = null)
@@ -753,7 +864,87 @@ internal sealed class XsdViewerForm : Form
         return Path.GetFileName(location);
     }
 
-    private enum NavigationKind { Overview, Element, Type }
+    private sealed class PropertySection : Panel
+    {
+        private const int HeaderHeight = 28;
+        public const int MinimumExpandedHeight = 120;
+
+        private readonly Button headerButton;
+        private readonly Panel contentHost;
+        private readonly Func<bool> hasContent;
+        private bool expanded = true;
+        private int allocatedExpandedHeight = MinimumExpandedHeight;
+
+        public PropertySection(string title, Control content, Func<bool> hasContent)
+        {
+            this.hasContent = hasContent;
+
+            Margin = new Padding(0, 0, 0, 7);
+            Padding = new Padding(1);
+            BorderStyle = BorderStyle.FixedSingle;
+            Height = MinimumExpandedHeight;
+
+            headerButton = new Button
+            {
+                Dock = DockStyle.Top,
+                Height = HeaderHeight,
+                FlatStyle = FlatStyle.Flat,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = new Font(SystemFonts.MessageBoxFont, FontStyle.Bold),
+                UseVisualStyleBackColor = true,
+                TabStop = false
+            };
+            headerButton.FlatAppearance.BorderSize = 0;
+            headerButton.Click += (_, _) =>
+            {
+                expanded = !expanded;
+                ApplyExpandedState();
+                LayoutStateChanged?.Invoke(this, EventArgs.Empty);
+            };
+
+            contentHost = new Panel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(4)
+            };
+            content.Dock = DockStyle.Fill;
+            contentHost.Controls.Add(content);
+
+            Controls.Add(contentHost);
+            Controls.Add(headerButton);
+            Title = title;
+            ApplyExpandedState();
+        }
+
+        public event EventHandler? LayoutStateChanged;
+
+        private string Title { get; }
+
+        public bool IsExpanded => expanded;
+
+        public int CollapsedHeight => HeaderHeight + Padding.Vertical + 2;
+
+        public void RefreshVisibility()
+        {
+            Visible = hasContent();
+            if (Visible) ApplyExpandedState();
+        }
+
+        public void SetExpandedHeight(int height)
+        {
+            allocatedExpandedHeight = Math.Max(MinimumExpandedHeight, height);
+            if (expanded) Height = allocatedExpandedHeight;
+        }
+
+        private void ApplyExpandedState()
+        {
+            headerButton.Text = (expanded ? "−  " : "+  ") + Title;
+            contentHost.Visible = expanded;
+            Height = expanded ? allocatedExpandedHeight : CollapsedHeight;
+        }
+    }
+
+    private enum NavigationKind { Overview, Element, ElementPath, Type }
 
     private sealed class NavigationEntry : IEquatable<NavigationEntry>
     {

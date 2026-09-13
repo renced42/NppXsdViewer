@@ -20,7 +20,6 @@
 - Added schema-path copy action.
 - Added occurrence badges such as 0..1 and 0..*.
 - Added documentation preview tooltip.
-- Added mini-map for larger diagrams.
 - Added 100% zoom reset.
 - Existing collapsed-by-default and Expand all/Collapse all behaviour remains unchanged.
 

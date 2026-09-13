@@ -122,6 +122,7 @@ public sealed class XsdSchemaLoader
 
         var dependencies = BuildDependencies(schemas);
         var components = BuildComponents(schemas, globalElements, types, dependencies);
+        var searchElements = BuildSearchElements(globalElements, types);
         var references = BuildReferences(globalElements, types);
 
         return new SchemaModel
@@ -132,6 +133,7 @@ public sealed class XsdSchemaLoader
             Types = types,
             LoadedSchemas = loadedSchemas,
             Components = components,
+            SearchElements = searchElements,
             Dependencies = dependencies,
             Diagnostics = diagnostics.ToArray(),
             References = references
@@ -442,6 +444,60 @@ public sealed class XsdSchemaLoader
             SourceUri = annotated.SourceUri ?? string.Empty,
             SourceLine = annotated.LineNumber > 0 ? annotated.LineNumber : null
         };
+
+
+    private static IReadOnlyList<SchemaComponentModel> BuildSearchElements(
+        IReadOnlyList<SchemaElementModel> globalElements,
+        IReadOnlyDictionary<string, SchemaTypeModel> types)
+    {
+        var result = new List<SchemaComponentModel>();
+        foreach (var root in globalElements)
+        {
+            var pathTypes = new HashSet<string>(StringComparer.Ordinal);
+            AddSearchChildren(result, root, root.Name, root.Name, types, pathTypes);
+        }
+
+        return result
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(c => c.SchemaPath, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static void AddSearchChildren(
+        ICollection<SchemaComponentModel> result,
+        SchemaElementModel parent,
+        string rootName,
+        string parentPath,
+        IReadOnlyDictionary<string, SchemaTypeModel> types,
+        ISet<string> pathTypes)
+    {
+        if (string.IsNullOrWhiteSpace(parent.TypeName) || !types.TryGetValue(parent.TypeName, out var type))
+            return;
+        if (!pathTypes.Add(type.QualifiedName))
+            return;
+
+        foreach (var child in type.Elements)
+        {
+            var childPath = parentPath + "/" + child.Name;
+            result.Add(new SchemaComponentModel
+            {
+                Kind = SchemaComponentKind.Element,
+                Name = child.Name,
+                QualifiedName = child.QualifiedName,
+                TypeName = child.TypeName,
+                Documentation = child.Documentation,
+                SourceUri = child.SourceUri,
+                SourceLine = child.SourceLine,
+                RootElementName = rootName,
+                SchemaPath = childPath,
+                IsNestedElement = true
+            });
+
+            AddSearchChildren(result, child, rootName, childPath, types, pathTypes);
+        }
+
+        pathTypes.Remove(type.QualifiedName);
+    }
 
     private static IReadOnlyList<SchemaReferenceModel> BuildReferences(
         IReadOnlyList<SchemaElementModel> globalElements,

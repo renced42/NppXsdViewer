@@ -24,23 +24,27 @@ foreach ($assemblyName in @('NppXsdViewer.Schema', 'NppXsdViewer.Diagram')) {
 if ($exportsText -notmatch 'AssemblyResolver\.Install\(\)') { throw 'AssemblyResolver is not installed from the unmanaged export layer.' }
 
 $schemaText = Get-Content (Join-Path $root 'src\NppXsdViewer.Schema\Model\SchemaModel.cs') -Raw
-foreach ($required in @('Components', 'Dependencies', 'Diagnostics', 'References', 'Patterns', 'EnumerationValues', 'Facets')) {
+foreach ($required in @('Components', 'SearchElements', 'Dependencies', 'Diagnostics', 'References', 'Patterns', 'EnumerationValues', 'Facets')) {
     if ($schemaText -notmatch [Regex]::Escape($required)) { throw "Schema model feature is missing: $required" }
 }
 
 $diagramText = Get-Content (Join-Path $root 'src\NppXsdViewer.Diagram\SchemaDiagramControl.cs') -Raw
-foreach ($required in @('expandedCompositors', 'CollapseAll', 'ExpandAll', 'SelectionChanged', 'DrawMiniMap', 'Copy schema path', 'SetRootType', 'TypeDefinitionRequested')) {
+foreach ($required in @('expandedCompositors', 'CollapseAll', 'ExpandAll', 'SelectionChanged', 'Copy schema path', 'SetRootType', 'TypeDefinitionRequested')) {
     if ($diagramText -notmatch [Regex]::Escape($required)) { throw "Diagram feature is missing: $required" }
 }
-foreach ($forbiddenText in @('MaxDepth', 'FitToWindow', 'TextRenderer.DrawText')) {
+foreach ($required in @('BadgeKind.Optional', 'DashStyle.Dot', '"optional"', '"[1]"', 'RevealPath')) {
+    if ($diagramText -notmatch [Regex]::Escape($required)) { throw "Required/optional diagram feature is missing: $required" }
+}
+
+foreach ($forbiddenText in @('MaxDepth', 'FitToWindow', 'TextRenderer.DrawText', 'DrawMiniMap', 'MiniMapWidth', 'MiniMapHeight', 'MiniMapMargin')) {
     if ($diagramText -match [Regex]::Escape($forbiddenText)) { throw "Legacy diagram feature remains: $forbiddenText" }
 }
 
 $formText = Get-Content (Join-Path $plugin 'UI\XsdViewerForm.cs') -Raw
-foreach ($required in @('Components', 'Search schema', 'Complex Types', 'Simple Types', 'Used by', 'Dependencies', 'Problems', 'Expand all', 'Collapse all')) {
+foreach ($required in @('Components', 'SearchElements', 'Search schema', 'Complex Types', 'Simple Types', 'Used by', 'Dependencies', 'Problems', 'Expand all', 'Collapse all', 'propertyStack', 'PropertySection', 'ShowSearchElement')) {
     if ($formText -notmatch [Regex]::Escape($required)) { throw "Viewer UI feature is missing: $required" }
 }
-foreach ($forbiddenText in @('Enumerációk', 'Korlátozások', 'Attribútumok', 'Mind kinyit', 'Mind becsuk', 'Mélység:', 'Illesztés')) {
+foreach ($forbiddenText in @('Enumerációk', 'Korlátozások', 'Attribútumok', 'Mind kinyit', 'Mind becsuk', 'Mélység:', 'Illesztés', 'propertyTabs', 'ConfigurePropertyTabs')) {
     if ($formText -match [Regex]::Escape($forbiddenText)) { throw "Non-English or legacy UI label remains: $forbiddenText" }
 }
 

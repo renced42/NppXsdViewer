@@ -77,4 +77,21 @@ public sealed class XsdSchemaLoaderTests
         Assert.IsTrue(model.References.Any(r => r.TargetQualifiedName == currencyType.QualifiedName && r.ReferenceKind == "attribute type"));
     }
 
+    [TestMethod]
+    public void Load_BuildsSearchIndexForNestedElementsWithRootAndSchemaPath()
+    {
+        var path = Path.Combine(System.AppDomain.CurrentDomain.BaseDirectory, "chain-example.xsd");
+        var model = new XsdSchemaLoader().Load(path);
+
+        var fieldGroup = model.SearchElements.Single(c => c.Name == "FieldGroup");
+        Assert.IsTrue(fieldGroup.IsNestedElement);
+        Assert.AreEqual("Root", fieldGroup.RootElementName);
+        Assert.AreEqual("Root/Chain/Chain_elem/FieldGroup", fieldGroup.SchemaPath);
+        Assert.IsTrue(fieldGroup.SourceLine.HasValue);
+
+        var code = model.SearchElements.Single(c => c.Name == "code");
+        Assert.AreEqual("Root/Chain/Chain_elem/FieldGroup/code", code.SchemaPath);
+        Assert.IsTrue(model.Types.ContainsKey(code.TypeName));
+    }
+
 }

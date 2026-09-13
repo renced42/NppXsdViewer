@@ -10,7 +10,7 @@ namespace NppXsdViewer.Diagram;
 
 /// <summary>
 /// Read-only XSD diagram control. Nodes are collapsed by default and can be expanded
-/// through compositor/base-type capsules. It also provides a mini-map and schema-path actions.
+/// through compositor/base-type capsules. It also provides schema-path actions.
 /// </summary>
 public sealed class SchemaDiagramControl : ScrollableControl
 {
@@ -26,9 +26,6 @@ public sealed class SchemaDiagramControl : ScrollableControl
     private const int CapsuleHorizontalPadding = 10;
     private const int CapsuleToggleWidth = 20;
     private const int CapsuleMinWidth = 58;
-    private const int MiniMapWidth = 180;
-    private const int MiniMapHeight = 120;
-    private const int MiniMapMargin = 12;
 
     private readonly List<NodeVisual> nodes = new List<NodeVisual>();
     private readonly HashSet<string> expandedCompositors = new HashSet<string>(StringComparer.Ordinal);
@@ -133,6 +130,72 @@ public sealed class SchemaDiagramControl : ScrollableControl
         Invalidate();
     }
 
+    /// <summary>
+    /// Expands the ancestors required to reveal a schema element path and selects the target node.
+    /// The path uses the same slash-separated form shown by the viewer, for example Root/Group/Field.
+    /// </summary>
+    public bool RevealPath(string schemaPath, bool navigateToSource)
+    {
+        if (model == null || string.IsNullOrWhiteSpace(rootElementName) || string.IsNullOrWhiteSpace(schemaPath))
+            return false;
+
+        var parts = schemaPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || !string.Equals(parts[0], rootElementName, StringComparison.Ordinal))
+            return false;
+
+        var current = model.GlobalElements.FirstOrDefault(e => string.Equals(e.Name, rootElementName, StringComparison.Ordinal));
+        if (current == null)
+            return false;
+
+        var visualPath = current.Name;
+        for (var partIndex = 1; partIndex < parts.Length; partIndex++)
+        {
+            if (!model.Types.TryGetValue(current.TypeName, out var currentType))
+                return false;
+
+            var childIndex = -1;
+            SchemaElementModel? child = null;
+            for (var i = 0; i < currentType.Elements.Count; i++)
+            {
+                if (string.Equals(currentType.Elements[i].Name, parts[partIndex], StringComparison.Ordinal))
+                {
+                    childIndex = i;
+                    child = currentType.Elements[i];
+                    break;
+                }
+            }
+
+            if (child == null || childIndex < 0)
+                return false;
+
+            var nodeKey = CreateNodeKey(current, visualPath);
+            expandedCompositors.Add(nodeKey + "|content");
+            visualPath += "/" + child.Name + "#" + childIndex;
+            current = child;
+        }
+
+        RebuildLayout();
+        selectedNode = nodes.FirstOrDefault(n => string.Equals(n.DisplayPath, schemaPath, StringComparison.Ordinal));
+        if (selectedNode == null)
+            return false;
+
+        CenterNode(selectedNode);
+        RaiseSelection(selectedNode);
+        Invalidate();
+        if (navigateToSource && selectedNode.SourceLine is int line)
+            NavigateRequested?.Invoke(this, new SchemaLocationEventArgs(line, selectedNode.Element.SourceUri));
+        return true;
+    }
+
+    private void CenterNode(NodeVisual node)
+    {
+        var centerX = (node.Bounds.Left + node.Bounds.Width / 2f) * zoom;
+        var centerY = (node.Bounds.Top + node.Bounds.Height / 2f) * zoom;
+        var scrollX = Math.Max(0, (int)Math.Round(centerX - ClientSize.Width / 2f));
+        var scrollY = Math.Max(0, (int)Math.Round(centerY - ClientSize.Height / 2f));
+        AutoScrollPosition = new Point(scrollX, scrollY);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
@@ -153,7 +216,6 @@ public sealed class SchemaDiagramControl : ScrollableControl
             e.Graphics.Restore(state);
         }
 
-        DrawMiniMap(e.Graphics);
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -547,7 +609,10 @@ public sealed class SchemaDiagramControl : ScrollableControl
         using var backgroundBrush = new SolidBrush(SystemColors.Window);
         using var headerBrush = new SolidBrush(selected ? SystemColors.GradientActiveCaption : SystemColors.ControlLight);
         using var typeBrush = new SolidBrush(SystemColors.Control);
+        var optional = node.Element.MinOccurs == 0m;
         using var borderPen = new Pen(selected ? SystemColors.Highlight : SystemColors.ControlDark, selected ? 2f : 1f);
+        if (optional)
+            borderPen.DashStyle = DashStyle.Dot;
         using var titleFont = new Font(SystemFonts.MessageBoxFont, FontStyle.Bold);
         using var typeFont = new Font(SystemFonts.MessageBoxFont, FontStyle.Italic);
 
@@ -556,14 +621,22 @@ public sealed class SchemaDiagramControl : ScrollableControl
         graphics.FillRectangle(typeBrush, node.Bounds.Left, node.Bounds.Top + HeaderHeight, node.Bounds.Width, TypeHeight);
         graphics.DrawRectangle(borderPen, node.Bounds.X, node.Bounds.Y, node.Bounds.Width, node.Bounds.Height);
 
-        DrawClippedText(graphics, node.Element.Name, titleFont, SystemColors.ControlText,
-            new RectangleF(node.Bounds.Left + 8, node.Bounds.Top + 2, node.Bounds.Width - 16, HeaderHeight - 4));
-        DrawClippedText(graphics, TypeCaption(node), typeFont, SystemColors.ControlText,
-            new RectangleF(node.Bounds.Left + 8, node.Bounds.Top + HeaderHeight, node.Bounds.Width - 16, TypeHeight));
-
         var occurrence = FormatOccurrence(node.Element);
-        if (!string.IsNullOrEmpty(occurrence))
-            DrawBadge(graphics, occurrence, node.Bounds.Right - 54, node.Bounds.Top + 5);
+        var occurrenceWidth = MeasureBadgeWidth(graphics, occurrence);
+        var optionalWidth = optional ? MeasureBadgeWidth(graphics, "optional") : 0f;
+        var titleRightReserve = occurrenceWidth + 18f;
+        var typeRightReserve = optional ? optionalWidth + 18f : 8f;
+
+        DrawClippedText(graphics, node.Element.Name, titleFont, SystemColors.ControlText,
+            new RectangleF(node.Bounds.Left + 8, node.Bounds.Top + 2,
+                Math.Max(24f, node.Bounds.Width - 8 - titleRightReserve), HeaderHeight - 4));
+        DrawClippedText(graphics, TypeCaption(node), typeFont, SystemColors.ControlText,
+            new RectangleF(node.Bounds.Left + 8, node.Bounds.Top + HeaderHeight,
+                Math.Max(24f, node.Bounds.Width - 8 - typeRightReserve), TypeHeight));
+
+        DrawBadge(graphics, occurrence, node.Bounds.Right - 8, node.Bounds.Top + 5, BadgeKind.Occurrence);
+        if (optional)
+            DrawBadge(graphics, "optional", node.Bounds.Right - 8, node.Bounds.Top + HeaderHeight + 3, BadgeKind.Optional);
 
         if (node.HasCompositor)
             DrawCapsule(graphics, node.CompositorBubbleBounds, CompositorLabel(node.CompositorKind), node.IsCompositorExpanded);
@@ -573,23 +646,35 @@ public sealed class SchemaDiagramControl : ScrollableControl
 
     private static string FormatOccurrence(SchemaElementModel element)
     {
-        if (element.MinOccurs == 1m && element.MaxOccurs == "1") return string.Empty;
         var min = element.MinOccurs.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var max = element.MaxOccurs == "unbounded" ? "*" : element.MaxOccurs;
-        return min + ".." + max;
+        return element.MinOccurs == 1m && max == "1" ? "[1]" : "[" + min + ".." + max + "]";
     }
 
-    private static void DrawBadge(Graphics graphics, string text, float right, float top)
+    private static float MeasureBadgeWidth(Graphics graphics, string text)
     {
         using var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 7f, FontStyle.Regular);
         var size = graphics.MeasureString(text, font);
-        var width = Math.Max(30f, size.Width + 8f);
+        return Math.Max(30f, size.Width + 10f);
+    }
+
+    private static void DrawBadge(Graphics graphics, string text, float right, float top, BadgeKind kind)
+    {
+        using var font = new Font(SystemFonts.MessageBoxFont.FontFamily, 7f, FontStyle.Regular);
+        var width = MeasureBadgeWidth(graphics, text);
         var bounds = new RectangleF(right - width, top, width, 17f);
-        using var fill = new SolidBrush(SystemColors.Info);
+        using var fill = new SolidBrush(kind == BadgeKind.Optional ? SystemColors.ControlLightLight : SystemColors.Info);
         using var pen = new Pen(SystemColors.ControlDark);
         graphics.FillRectangle(fill, bounds);
         graphics.DrawRectangle(pen, bounds.X, bounds.Y, bounds.Width, bounds.Height);
-        DrawClippedText(graphics, text, font, SystemColors.InfoText, bounds);
+        DrawClippedText(graphics, text, font,
+            kind == BadgeKind.Optional ? SystemColors.ControlText : SystemColors.InfoText, bounds);
+    }
+
+    private enum BadgeKind
+    {
+        Occurrence,
+        Optional
     }
 
     private static string TypeCaption(NodeVisual node)
@@ -643,46 +728,6 @@ public sealed class SchemaDiagramControl : ScrollableControl
         const float markerHalf = 4f;
         graphics.DrawLine(pen, centerX - markerHalf, centerY, centerX + markerHalf, centerY);
         if (!expanded) graphics.DrawLine(pen, centerX, centerY - markerHalf, centerX, centerY + markerHalf);
-    }
-
-    private void DrawMiniMap(Graphics graphics)
-    {
-        if (nodes.Count < 2 || ClientSize.Width < MiniMapWidth + 80 || ClientSize.Height < MiniMapHeight + 80)
-            return;
-
-        var logicalRight = nodes.Max(n => n.Bounds.Right);
-        var logicalBottom = nodes.Max(n => n.Bounds.Bottom);
-        if (logicalRight <= 0 || logicalBottom <= 0) return;
-
-        var map = new Rectangle(ClientSize.Width - MiniMapWidth - MiniMapMargin, MiniMapMargin, MiniMapWidth, MiniMapHeight);
-        using var background = new SolidBrush(Color.FromArgb(235, SystemColors.Window));
-        using var border = new Pen(SystemColors.ControlDark);
-        using var nodeBrush = new SolidBrush(Color.FromArgb(120, SystemColors.Highlight));
-        graphics.FillRectangle(background, map);
-        graphics.DrawRectangle(border, map);
-
-        var scaleX = (map.Width - 8f) / logicalRight;
-        var scaleY = (map.Height - 8f) / logicalBottom;
-        var scale = Math.Min(scaleX, scaleY);
-        foreach (var node in nodes)
-        {
-            var r = new RectangleF(
-                map.Left + 4f + node.Bounds.Left * scale,
-                map.Top + 4f + node.Bounds.Top * scale,
-                Math.Max(2f, node.Bounds.Width * scale),
-                Math.Max(2f, node.Bounds.Height * scale));
-            graphics.FillRectangle(nodeBrush, r);
-        }
-
-        var viewportLeft = Math.Max(0f, -AutoScrollPosition.X / zoom);
-        var viewportTop = Math.Max(0f, -AutoScrollPosition.Y / zoom);
-        var viewport = new RectangleF(
-            map.Left + 4f + viewportLeft * scale,
-            map.Top + 4f + viewportTop * scale,
-            Math.Min(map.Width - 8f, ClientSize.Width / zoom * scale),
-            Math.Min(map.Height - 8f, ClientSize.Height / zoom * scale));
-        using var viewportPen = new Pen(SystemColors.Highlight, 1.5f);
-        graphics.DrawRectangle(viewportPen, viewport.X, viewport.Y, viewport.Width, viewport.Height);
     }
 
     private static GraphicsPath CreateRoundedRectangle(RectangleF bounds, float radius)
