@@ -1,14 +1,21 @@
 # NppXsdViewer
 
-Read-only, grafikus XSD megjelenítő plugin Notepad++-hoz C# nyelven.
+Read-only graphical XSD viewer and explorer plugin for Notepad++, written in C#.
 
-## Cél
+<img width="1574" height="905" alt="image" src="https://github.com/user-attachments/assets/4b33b67b-887c-4171-b15b-a24b4049cf98" />
 
-A plugin az aktuálisan megnyitott, mentett `.xsd` állományt olvassa, feloldja a lokális `xs:include` és `xs:import` hivatkozásokat, majd egy Notepad++ dock panelen gráfszerűen jeleníti meg a séma elemeit és típuskapcsolatait.
 
-**A plugin nem szerkeszti és nem írja vissza az XSD-t.**
+## Purpose
 
-## Technológia
+The plugin reads the currently opened and saved `.xsd` file, resolves local and remote `xs:include` / `xs:import` references, and displays the schema structure and type relationships in a dockable Notepad++ panel.
+
+**The plugin is read-only: it does not edit or write changes back to the XSD file.**
+
+The main goal is to make large and complex XSD schemas easier to inspect, search, navigate, and understand without leaving Notepad++.
+
+---
+
+## Technology
 
 - C#
 - .NET Framework 4.8
@@ -16,46 +23,380 @@ A plugin az aktuálisan megnyitott, mentett `.xsd` állományt olvassa, feloldja
 - `System.Xml.Schema.XmlSchemaSet`
 - Notepad++ plugin API
 - `UnmanagedExports.Repack.Upgrade` 1.2.1
-- helyi `RGiesecke.DllExport.DllExportAttribute`
-- x64 célplatform
-- saját `AssemblyResolve` kezelés a plugin mappában lévő managed DLL-ekhez
+- local `RGiesecke.DllExport.DllExportAttribute`
+- x64 target platform
+- custom `AssemblyResolve` handling for managed DLLs located in the plugin folder
 
-A plugin export-rétege az aktuális `NppCSharpPluginPack` mintáját követi. Nincs `net.r_eg.DllExport` függőség.
+The plugin export layer follows the current `NppCSharpPluginPack` approach.
 
-## Solution
+There is no `net.r_eg.DllExport` dependency.
+
+---
+
+## Solution structure
 
 ```text
 NppXsdViewer.sln
+
 src/
-  NppXsdViewer.Schema/     XSD betöltés, resolver, normalizált modell
-  NppXsdViewer.Diagram/    read-only WinForms diagram
-  NppXsdViewer.Plugin/     Notepad++ integráció és dock panel
+  NppXsdViewer.Schema/     XSD loading, resolver and normalized schema model
+  NppXsdViewer.Diagram/    Read-only WinForms diagram and explorer UI
+  NppXsdViewer.Plugin/     Notepad++ integration and dock panel
+
 tests/
   NppXsdViewer.Schema.Tests/
+
 examples/
   invoice.xsd
+
 docs/
   PLUGIN-INFRASTRUCTURE.md
 ```
 
-## Jelenlegi funkciók
+### `NppXsdViewer.Schema`
 
-- globális elemek listázása
-- `complexType` és `simpleType`
-- `sequence`, `choice`, `all`
-- element és attribute megjelenítés
-- `minOccurs` / `maxOccurs`
-- enum, pattern és XSD facet értékek betöltése
-- lokális `include` / `import`
-- HTTP/HTTPS XSD import/include feloldás
-- gyökérelem választó
-- zoom: `Ctrl + egérgörgő`
-- diagram node dupla kattintás -> ugrás az XSD forrássorára
-- automatikus frissítés mentéskor és aktív dokumentum váltásakor
+Contains schema-processing logic:
 
-## Notepad++ unmanaged exportok
+- XSD loading;
+- schema compilation;
+- local and remote imports/includes;
+- normalized schema model;
+- global and local elements;
+- complex/simple types;
+- restrictions and facets;
+- documentation;
+- dependency information.
 
-A `NppXsdViewer.dll` az alábbi, Notepad++ által elvárt belépési pontokat exportálja:
+### `NppXsdViewer.Diagram`
+
+Contains the graphical viewer:
+
+- diagram layout;
+- node rendering;
+- compositor rendering;
+- search;
+- navigation;
+- property sections;
+- selection;
+- zoom;
+- source synchronization.
+
+### `NppXsdViewer.Plugin`
+
+Contains Notepad++ integration:
+
+- unmanaged plugin entry points;
+- Notepad++ messaging;
+- Scintilla integration;
+- docking panel;
+- source navigation;
+- managed dependency resolution.
+
+---
+
+# Current features
+
+## Global element overview
+
+The initial view lists the global XSD elements.
+
+Double-click an element or press Enter to open its diagram.
+
+The selected root element opens collapsed by default so large schemas remain manageable.
+
+---
+
+## Graphical schema diagram
+
+Supported schema structures include:
+
+- global elements;
+- local/nested elements;
+- `complexType`;
+- `simpleType`;
+- anonymous `complexType`;
+- `sequence`;
+- `choice`;
+- `all`;
+- `xs:extension`;
+- elements and attributes;
+- `minOccurs`;
+- `maxOccurs`;
+- enumerations;
+- patterns;
+- XSD facet values;
+- documentation.
+
+There is no artificial diagram depth limit.
+
+The schema structure can be expanded manually or with:
+
+```text
+Expand all
+Collapse all
+```
+
+---
+
+## Compositor display
+
+`sequence`, `choice`, and `all` are displayed outside the element/type box as separate interactive capsules.
+
+The capsules show their full names:
+
+```text
+sequence
+choice
+all
+extends
+```
+
+Each capsule has its own expand/collapse control.
+
+This keeps structural information separate from element properties and makes large diagrams easier to read.
+
+---
+
+## Required and optional elements
+
+Element cardinality is visible directly in the diagram.
+
+### Required elements
+
+Required elements use:
+
+- a solid border;
+- an occurrence badge, for example:
+
+```text
+[1]
+[1..*]
+```
+
+### Optional elements
+
+Elements with:
+
+```xml
+minOccurs="0"
+```
+
+use:
+
+- a dotted border;
+- an `optional` badge;
+- an occurrence badge, for example:
+
+```text
+[0..1]
+[0..*]
+```
+
+The distinction does not rely only on color.
+
+---
+
+## Schema Component Browser
+
+The component browser groups the main schema components into categories:
+
+- Elements
+- Complex Types
+- Simple Types
+- Groups
+- Attribute Groups
+- Attributes
+- Imports
+- Includes
+
+Global elements and named types can be opened directly from the browser.
+
+---
+
+## Search schema
+
+`Search schema` searches the schema model, including both global components and nested/local `xs:element` declarations.
+
+Searchable information includes:
+
+- element name;
+- type name;
+- namespace;
+- documentation;
+- pattern;
+- enumeration values;
+- restriction/facet values.
+
+Example:
+
+```xml
+<element name="Field_0C0001C0032CA"
+         minOccurs="0"
+         meta:metaType="FieldMetaType">
+    <annotation>
+        <documentation>
+            32. A szakirányú oktatás és a duális képzés...
+        </documentation>
+    </annotation>
+    <simpleType>
+        <restriction base="string">
+            <minLength value="1"/>
+            <maxLength value="15"/>
+            <pattern value="[0-9]+"/>
+        </restriction>
+    </simpleType>
+</element>
+```
+
+A local element such as `Field_0C0001C0032CA` can be found directly by name or by searchable schema metadata.
+
+### Nested result navigation
+
+For nested/local elements, the result includes the complete schema path.
+
+Selecting a nested result:
+
+1. opens the owning global root element;
+2. expands the schema path down to the result;
+3. selects the matching diagram node;
+4. centers it in the diagram;
+5. navigates to the corresponding XSD declaration in Notepad++;
+6. highlights the complete declaration in the source editor.
+
+---
+
+## Source navigation and highlighting
+
+Clicking a diagram node navigates directly to the corresponding source declaration.
+
+The plugin:
+
+- locates the complete XSD XML declaration;
+- highlights the full declaration using a Scintilla indicator;
+- scrolls the editor so the declaration is approximately centered;
+- clears the previous highlight;
+- works with UTF-8 byte positions so accented/non-ASCII text does not break navigation.
+
+For self-closing elements, only the self-closing tag is highlighted.
+
+Compositor capsules only expand/collapse the diagram and do not navigate to the source.
+
+---
+
+## Navigation
+
+The viewer provides:
+
+- Back
+- Forward
+- breadcrumb path
+- Root element selector
+- Go to type definition
+- Used by
+- Copy schema path
+
+Example breadcrumb:
+
+```text
+CreateReceiptRequest / issuingSoftware / name
+```
+
+---
+
+## Right-side property inspector
+
+The right-side inspector uses vertically stacked boxes instead of tabs.
+
+Available sections include:
+
+- General
+- Pattern
+- Enumerations
+- Restrictions
+- Attributes
+- Documentation
+- Used by
+- Dependencies
+- Problems
+
+Behavior:
+
+- empty sections are hidden;
+- each section can be collapsed independently;
+- visible sections automatically share the available vertical space;
+- long content scrolls inside its own box;
+- if many sections are visible, the complete inspector column can scroll.
+
+The diagram nodes themselves stay intentionally compact: detailed restrictions, patterns, enumerations, attributes, and documentation belong in the property inspector.
+
+---
+
+## Used by
+
+The `Used by` section shows where a selected schema type or component is referenced.
+
+This is useful in large schemas with reusable common types.
+
+---
+
+## Dependencies
+
+The Dependencies section shows `xs:import` and `xs:include` relationships.
+
+Displayed information may include:
+
+- dependency type;
+- namespace;
+- `schemaLocation`;
+- resolved local or remote location;
+- resolution status.
+
+Local imported XSD files can be opened directly in Notepad++.
+
+---
+
+## Problems
+
+Schema loading and validation problems are shown separately.
+
+Available information includes:
+
+- Error / Warning;
+- source;
+- line;
+- column;
+- message.
+
+The viewer attempts to preserve useful schema navigation even when the schema contains recoverable problems.
+
+---
+
+## Automatic refresh
+
+The viewer refreshes automatically when:
+
+- the current XSD is saved;
+- the active Notepad++ document changes.
+
+---
+
+## Zoom
+
+Zoom is available with:
+
+```text
+Ctrl + mouse wheel
+```
+
+Text and diagram geometry use the same GDI+ transform, so labels and boxes remain aligned while zooming.
+
+The logical point under the mouse cursor is preserved as closely as possible during zoom.
+
+---
+
+# Notepad++ unmanaged exports
+
+`NppXsdViewer.dll` exports the entry points expected by Notepad++:
 
 ```text
 isUnicode
@@ -66,57 +407,114 @@ getName
 beNotified
 ```
 
-Az exportok forrása:
+Export implementation:
 
 ```text
 src/NppXsdViewer.Plugin/PluginInfrastructure/UnmanagedExports.cs
 ```
 
-Az export attribútum:
+Export attribute:
 
 ```text
 src/NppXsdViewer.Plugin/PluginInfrastructure/DllExport/DllExportAttribute.cs
 ```
 
-## Build
+Because this layer exposes unmanaged Notepad++ plugin entry points, the plugin is built specifically for `x64`.
 
-Előfeltételek:
+`Any CPU` should not be used for release builds.
 
-1. Windows 10/11
-2. Visual Studio 2022
-3. `.NET desktop development` workload
-4. .NET Framework 4.8 Developer Pack
-5. NuGet package restore
-6. 64 bites Notepad++
+---
 
-Visual Studio alatt:
+# Requirements
 
-1. Nyisd meg a `NppXsdViewer.sln` fájlt.
-2. Válaszd a `Debug | x64` vagy `Release | x64` konfigurációt.
-3. Restore NuGet packages.
-4. Build Solution.
+## Operating system
 
-Parancssorból, Visual Studio Developer PowerShellben:
-
-```powershell
-.\build.ps1
-```
-
-A build script:
-
-```powershell
-msbuild NppXsdViewer.sln /restore /m /p:Configuration=Release /p:Platform=x64
-```
-
-## Telepítés fejlesztéshez
-
-Release build után hozd létre:
+Supported development/runtime environment:
 
 ```text
-<Notepad++>\plugins\NppXsdViewer\
+Windows 10
+Windows 11
 ```
 
-és másold bele a build outputból legalább:
+## Notepad++
+
+The current build targets:
+
+```text
+64-bit Notepad++
+```
+
+## .NET Framework
+
+The plugin targets:
+
+```text
+.NET Framework 4.8
+```
+
+This is a **.NET Framework 4.8** application.
+
+It is not a `.NET 8`, `.NET 9`, or `.NET 10` plugin.
+
+For development/building, install:
+
+```text
+.NET Framework 4.8 Developer Pack / Targeting Pack
+```
+
+The target machine must have the .NET Framework 4.8 runtime available.
+
+---
+
+# Recommended build environment
+
+Recommended IDE:
+
+```text
+Visual Studio 2022
+```
+
+The Community edition is sufficient.
+
+Install the following workload/components:
+
+- `.NET desktop development`
+- `.NET Framework 4.8 Targeting Pack`
+- MSBuild
+- NuGet package restore support
+
+---
+
+# Build with Visual Studio
+
+1. Open:
+
+```text
+NppXsdViewer.sln
+```
+
+2. Select one of:
+
+```text
+Debug | x64
+Release | x64
+```
+
+For distribution, use:
+
+```text
+Release | x64
+```
+
+3. Restore NuGet packages.
+
+4. Run:
+
+```text
+Build -> Rebuild Solution
+```
+
+The main runtime assemblies are:
 
 ```text
 NppXsdViewer.dll
@@ -124,50 +522,49 @@ NppXsdViewer.Schema.dll
 NppXsdViewer.Diagram.dll
 ```
 
-Ezután indítsd újra a Notepad++-t.
-
-A menüben:
+The main Notepad++ plugin DLL is:
 
 ```text
-Plugins
-  NppXsdViewer
-    XSD diagram megjelenítése
-    XSD diagram frissítése
+NppXsdViewer.dll
 ```
 
-## Példa
+---
 
-Nyisd meg a Notepad++-ban:
+# Build from the command line
+
+Run the build from a Visual Studio Developer PowerShell or Developer Command Prompt.
+
+Example:
+
+```powershell
+msbuild NppXsdViewer.sln /restore /m /p:Configuration=Release /p:Platform=x64
+```
+
+The repository also contains:
 
 ```text
-examples\invoice.xsd
+build.ps1
 ```
 
-majd:
+Run it from the repository root:
 
-```text
-Plugins -> NppXsdViewer -> XSD diagram megjelenítése
+```powershell
+.\build.ps1
 ```
 
-A panel jobb oldalon dockolva jelenik meg.
+The script invokes:
 
-## Biztonság
+```powershell
+msbuild NppXsdViewer.sln /restore /m /p:Configuration=Release /p:Platform=x64
+```
 
-Az `XsdResourceResolver` támogatja a lokális `file:` és a távoli `http:`/`https:` `schemaLocation` hivatkozásokat. A relatív hivatkozásokat a hivatkozó XSD URI-jához képest oldja fel. Más URI-sémák tiltottak. Hálózati XSD-ből `file:` URI-ra váltás biztonsági okból nem engedélyezett. A hálózati lekérés 15 másodperces időkorlátot és XSD-nként 10 MiB-os méretkorlátot használ.
+and prepares the deployment output.
 
-## Hatókör
+---
 
-Ez a verzió kizárólag megjelenítő. Nem tartalmaz:
+# Build output
 
-- XSD módosítást
-- drag & drop szerkesztést
-- element/type létrehozást
-- property editort
-- diagram -> XSD visszaírást
-
-## Build kimenet / Notepad++ telepítési csomag
-
-A plugin projekt minden sikeres buildje után automatikusan létrejön a telepítési könyvtár:
+After a successful build, the plugin deployment directory is created as:
 
 ```text
 dist/
@@ -177,144 +574,428 @@ dist/
    └─ NppXsdViewer.Diagram.dll
 ```
 
-Ezt a teljes `NppXsdViewer` könyvtárat kell a Notepad++ `plugins` könyvtárába másolni:
-
-```text
-C:\Program Files\Notepad++\plugins\NppXsdViewer\
-```
-
-A gyökérből futtatott `build.ps1` a sikeres `Release|x64` build után ezen felül elkészíti:
+The root `build.ps1` also creates:
 
 ```text
 dist\NppXsdViewer-plugin.zip
 ```
 
-A `dist` könyvtárba kizárólag a plugin futásához szükséges saját DLL-ek kerülnek. A build-time `DllExport`, `Microsoft.Build` és egyéb csomagfájlokat nem kell a Notepad++ alá másolni.
+Only the runtime DLLs required by the plugin are copied to `dist`.
 
-### Managed függőségek betöltése
+Build-time packages such as DllExport or Microsoft.Build components do not need to be copied into the Notepad++ installation.
 
-A Notepad++ folyamata nem feltétlenül a `plugins\NppXsdViewer` könyvtárat használja managed assembly probing útvonalként. Emiatt a plugin már az unmanaged export réteg első inicializálásakor `AssemblyResolve` handlert telepít, amely kizárólag az alábbi saját függőségeket tölti be a `NppXsdViewer.dll` mappájából:
+---
+
+# Manual installation
+
+## 1. Close Notepad++
+
+Close all running Notepad++ instances before installing or replacing plugin files.
+
+## 2. Create the plugin directory
+
+For a standard 64-bit Notepad++ installation:
+
+```text
+C:\Program Files\Notepad++\plugins\NppXsdViewer\
+```
+
+## 3. Copy the runtime DLLs
+
+Copy:
+
+```text
+NppXsdViewer.dll
+NppXsdViewer.Schema.dll
+NppXsdViewer.Diagram.dll
+```
+
+The final layout should be:
+
+```text
+C:\Program Files\Notepad++\plugins\NppXsdViewer\
+    NppXsdViewer.dll
+    NppXsdViewer.Schema.dll
+    NppXsdViewer.Diagram.dll
+```
+
+All three assemblies must remain in the same directory.
+
+## 4. Restart Notepad++
+
+Start Notepad++ again.
+
+The plugin appears under:
+
+```text
+Plugins
+  NppXsdViewer
+```
+
+The plugin-owned UI is English-only.
+
+---
+
+# Example
+
+Open:
+
+```text
+examples\invoice.xsd
+```
+
+in Notepad++ and start the viewer from:
+
+```text
+Plugins -> NppXsdViewer
+```
+
+The viewer opens as a dockable panel.
+
+---
+
+# Managed dependency loading
+
+The Notepad++ process does not necessarily use:
+
+```text
+plugins\NppXsdViewer
+```
+
+as a normal managed assembly probing path.
+
+Therefore the plugin installs an `AssemblyResolve` handler during early initialization.
+
+It resolves the plugin's own managed dependencies from the directory containing `NppXsdViewer.dll`:
 
 ```text
 NppXsdViewer.Schema.dll
 NppXsdViewer.Diagram.dll
 ```
 
-Ezért a három DLL-nek továbbra is ugyanabban a plugin könyvtárban kell lennie, de nincs szükség a Notepad++ gyökérkönyvtárába másolásra.
+This is why the three DLLs must remain together in the same plugin directory.
 
-### 0.1.8 diagrammegjelenítés
+They do not need to be copied into the Notepad++ application root.
 
-A viewer az anonim `complexType`, az `xs:extension` alaptípus, valamint a komplex és egyszerű gyermekelemek struktúráját is kezeli. A részletes nézetben a szerkezet manuálisan nyitható ki.
+---
 
+# XSD imports and includes
 
-## 0.1.8 lista alapú navigáció
+`XsdResourceResolver` supports:
 
-Az alapnézet a globális XSD-elemek listája. Dupla kattintás vagy Enter megnyitja a kiválasztott elem részletes diagramját. A „Vissza a listához” gombbal az áttekintő nézethez lehet visszatérni.
+- local `file:` references;
+- remote `http:` references;
+- remote `https:` references;
+- relative `schemaLocation` resolution;
+- chained imports/includes.
 
+Relative references are resolved against the URI of the referring XSD.
 
-## 0.1.9 fordítási javítás
+Supported network behavior includes:
 
-- Javítva a `SchemaDiagramControl.RowVisual` `Element` névütközése.
-- A forráselem property neve `SourceElement`, a factory metódus neve `ForElement`.
-- Javítva az `AssemblyResolver` nullable annotációja.
-- Az MSTest teszt `Assert.ThrowsExactly` API-t használ.
-- A `NppXsdViewer.Diagram.dll` hiánya fordításkor csak következményhiba volt; az alap fordítási hiba megszűnésével létrejön.
+- TLS 1.2;
+- Windows default proxy configuration;
+- default proxy credentials;
+- chained remote imports/includes.
 
-## 0.2.0 diagram-interakció
+Security restrictions:
 
-- A diagram csomópontjai a fejléc bal oldalán található `+/-` vezérlővel ki- és becsukhatók.
-- A `sequence`, `choice` és `all` tartalmi csoport külön `+/-` vezérlőt kapott.
-- Az összecsukott kompozitor elrejti a gyermekelemeket és a hozzájuk tartozó diagramágakat, de a típus és az attribútumok továbbra is láthatók.
-- A felső eszköztáron `Összecsuk` és `Mind kinyit` művelet érhető el.
-- A dobozok kompaktabbak, kisebb a vízszintes és függőleges térköz, az összekötések egyszerűbb ortogonális vonalakkal jelennek meg.
+- unsupported URI schemes are rejected;
+- switching from a network XSD to a local `file:` URI is blocked;
+- network requests use a timeout;
+- remote XSD size is limited.
 
+Current limits:
 
-## 0.2.1 Altova-szerű compositor megjelenítés
+```text
+Network timeout: 15 seconds
+Maximum remote XSD size: 10 MiB per resource
+```
 
-- A `sequence`, `choice` és `all` kompozitor nem a típusdoboz egyik soraként jelenik meg.
-- A kompozitor a doboz jobb oldalán külön, kattintható buborékot kap (`S`, `C`, `A`).
-- A buborékon lévő `+` / `-` jel nyitja és csukja a kompozitorhoz tartozó gyermekágat.
-- A kompozitor gyermekelemei külön diagram-csomópontok; nem ismétlődnek meg a szülődoboz belsejében.
-- A hosszú címek, típusnevek, attribútumok és egyéb sorok `EndEllipsis` megjelenítést használnak, ezért a szöveg nem lóghat ki a dobozból.
-- Az öröklési (`extends`) kapcsolat a típusdobozban marad, a compositor összecsukása ettől független.
+---
 
+# Diagnostics
 
-## 0.3.0 tulajdonságpanel, lazy kibontás és zoom-javítás
+The plugin writes diagnostic information to the current user's TEMP directory.
 
-- A részletes diagram alapból **becsukott gyökérelemmel** indul.
-- Megszűnt a `Mélység` mező: nincs mesterséges kibontási mélységkorlát.
-- Megszűnt az `Illesztés` gomb.
-- Az `S` / `C` / `A` buborékokkal a `sequence` / `choice` / `all` ágak kézzel nyithatók és csukhatók.
-- A `B` buborék az alaptípus (`extends`) ágát nyitja és csukja.
-- A `Mind kinyit` a kiválasztott gyökérből elérhető teljes, nem ciklikus struktúrát kinyitja.
-- A `Mind becsuk` visszaállítja a kompakt gyökérnézetet.
-- A PMT25 `Chain_*` elemeknél a `Chain_elem` anonim `complexType` további ágai is manuálisan nyithatók; nincs többé 4 szintes korlát.
-- A diagramdobozok csak az elem nevét és típusát mutatják. Pattern, enum, facet, attribútum és dokumentáció nem terheli a diagramot.
-- A jobb oldali tabos tulajdonságpanel lapjai: `Általános`, `Pattern`, `Enumerációk`, `Korlátozások`, `Attribútumok`, `Dokumentáció`.
-- Egy diagramcsomópontra kattintva a jobb oldali panel az adott elem/típus adataira vált.
-- A zoom renderelése egységes GDI+ transzformációt használ. A szöveg már nem külön `TextRenderer` rétegen rajzolódik, ezért nagyításkor/kicsinyítéskor a szövegek és a dobozok együtt mozognak és skálázódnak.
-- `Ctrl + egérgörgő` nagyításkor a kurzor alatti logikai pont helyzete megmarad.
+Main plugin log:
 
-## 0.3.2 SplitContainer inicializálási javítás
+```text
+%TEMP%\NppXsdViewer.log
+```
 
-A jobb oldali tulajdonságpanel minimumszélessége már nem a konstruktorban kerül beállításra.
-A plugin a tényleges dockolt panelméret alapján, biztonságos tartományban állítja a
-`Panel1MinSize`, `Panel2MinSize` és `SplitterDistance` értékeket. Ez megszünteti a
-Notepad++ indulásakor/keskeny panelnél jelentkező `InvalidOperationException` hibát.
+Schema resolver/network diagnostics:
 
-## 0.3.3 forráskiemelés és középre igazított navigáció
+```text
+%TEMP%\NppXsdViewer-resolver.log
+```
 
-- A diagram egy elemére kattintva a forrásban már nem csak az elem kezdősorára ugrik.
-- A plugin megkeresi az adott XSD deklaráció teljes XML-tartományát, beleértve a beágyazott tartalmat is.
-- A teljes tartomány sárga kiemelést kap Scintilla indikátorral; a Notepad++ normál kijelölési színeit nem módosítja.
-- A forrásnézet függőlegesen úgy görget, hogy a kiválasztott elem kezdete megközelítőleg az editor közepére kerüljön.
-- A navigáció már egyszeres kattintásra működik a diagram csomópontjain; a sequence/choice/all/extends kapszulák kattintása továbbra is csak nyit/csuk.
-- Az XML-tartomány keresése UTF-8 bájtpozíciókkal dolgozik, ezért a Scintilla pozíciókkal közvetlenül kompatibilis, és az ékezetes tartalom sem tolja el a kijelölést.
+If the plugin does not start, a managed dependency cannot be loaded, or a remote import cannot be resolved, check these files first.
 
-## 0.3.4 English-only UI
+---
 
-All plugin-owned user interface labels, toolbar actions, menu commands, status messages and error messages are English-only. Text originating from the loaded XSD, such as `xs:documentation`, is displayed unchanged.
+# Troubleshooting
 
-## 0.4.0 schema explorer features
+## The plugin does not appear in Notepad++
 
-Version 0.4.0 turns the viewer into a broader XSD exploration tool while remaining read-only.
+Check that:
 
-- grouped component browser: Elements, Complex Types, Simple Types, Groups, Attribute Groups, Attributes, Imports and Includes;
-- schema-wide search including documentation, pattern and enumeration values;
-- Back/Forward navigation and breadcrumb path;
-- Go to type definition and Used by navigation;
+- you are running 64-bit Notepad++;
+- the plugin was built as `x64`;
+- the plugin folder is named `NppXsdViewer`;
+- the main DLL is named `NppXsdViewer.dll`;
+- all required DLLs are in the same plugin folder;
+- Notepad++ was restarted after installation.
+
+## Missing `NppXsdViewer.Diagram` assembly
+
+Example:
+
+```text
+Could not load file or assembly 'NppXsdViewer.Diagram'
+```
+
+Verify that all runtime assemblies are installed together:
+
+```text
+NppXsdViewer.dll
+NppXsdViewer.Schema.dll
+NppXsdViewer.Diagram.dll
+```
+
+## The project does not build
+
+Check that:
+
+- Visual Studio 2022 is installed;
+- `.NET desktop development` workload is installed;
+- .NET Framework 4.8 Developer Pack is installed;
+- NuGet restore completed successfully;
+- `Debug | x64` or `Release | x64` is selected;
+- MSBuild is launched from a Visual Studio developer shell.
+
+---
+
+# Security
+
+`XsdResourceResolver` supports local `file:` and remote `http:` / `https:` `schemaLocation` references.
+
+Relative references are resolved against the URI of the referring schema.
+
+Other URI schemes are rejected.
+
+For security reasons, a schema loaded from the network is not allowed to switch to a local `file:` URI.
+
+Network requests use:
+
+```text
+15 second timeout
+10 MiB maximum XSD size per resource
+```
+
+---
+
+# Scope
+
+This plugin is intentionally read-only.
+
+It does not provide:
+
+- XSD modification;
+- drag-and-drop editing;
+- element/type creation;
+- editable property panels;
+- diagram-to-XSD write-back.
+
+The XSD source remains the authoritative document and is edited directly in Notepad++.
+
+---
+
+# Notepad++ Plugin Admin packaging
+
+For submission to the official Notepad++ Plugin Admin repository, create a release ZIP whose root contains the runtime DLLs directly:
+
+```text
+NppXsdViewer-<version>-x64.zip
+├── NppXsdViewer.dll
+├── NppXsdViewer.Schema.dll
+└── NppXsdViewer.Diagram.dll
+```
+
+Do not place an additional `NppXsdViewer` directory inside the Plugin Admin ZIP.
+
+Plugin Admin creates the destination plugin folder itself.
+
+For an x64-only release, the plugin list entry belongs in:
+
+```text
+src/pl.x64.json
+```
+
+of the official:
+
+```text
+notepad-plus-plus/nppPluginList
+```
+
+repository.
+
+Before submission:
+
+- publish a public release;
+- verify the DLL/file version;
+- calculate the release ZIP SHA-256;
+- add a project license;
+- test Plugin Admin installation;
+- test update;
+- test removal.
+
+---
+
+# Version history
+
+## 0.1.8 - diagram rendering
+
+- Added anonymous `complexType` handling.
+- Added `xs:extension` base-type handling.
+- Complex and simple child elements are represented in the diagram.
+- The schema structure can be expanded manually.
+
+## 0.1.8 - list-based navigation
+
+- The initial view is the global XSD element list.
+- Double-click or Enter opens the selected element's detailed diagram.
+- `Back to list` returns to the overview.
+
+## 0.1.9 - build fixes
+
+- Fixed the `SchemaDiagramControl.RowVisual` `Element` naming collision.
+- Source element property renamed to `SourceElement`.
+- Factory method renamed to `ForElement`.
+- Fixed nullable annotation in `AssemblyResolver`.
+- MSTest uses `Assert.ThrowsExactly`.
+- The missing `NppXsdViewer.Diagram.dll` was a secondary build failure; fixing the source error restores the assembly output.
+
+## 0.2.0 - diagram interaction
+
+- Diagram nodes can be expanded/collapsed from the header.
+- `sequence`, `choice`, and `all` content groups have independent expand/collapse state.
+- Collapsing a compositor hides its child branch.
+- Added `Collapse all` and `Expand all`.
+- Reduced box spacing and simplified orthogonal connectors.
+
+## 0.2.1 - Altova-style compositor visualization
+
+- `sequence`, `choice`, and `all` are displayed outside the type box.
+- Compositors are separate clickable diagram controls.
+- Child elements appear only as child diagram nodes and are not duplicated inside the parent box.
+- Long labels use ellipsis to prevent text overflow.
+- Inheritance remains independent from compositor expansion.
+
+## 0.3.0 - property inspector, lazy expansion and zoom fixes
+
+- Root diagrams open collapsed.
+- Removed the artificial depth limit.
+- Removed the Fit button.
+- Added manual `sequence` / `choice` / `all` expansion.
+- Added independent base-type (`extends`) expansion.
+- `Expand all` opens the complete reachable non-cyclic structure.
+- `Collapse all` returns to the compact root view.
+- Nested anonymous `Chain_*` structures can be expanded without a four-level limit.
+- Diagram boxes contain only structural identity information.
+- Pattern, enumeration, facets, attributes, and documentation are shown in the property inspector.
+- Fixed zoom rendering so text and shapes use the same graphics transformation.
+- Cursor-centered zoom behavior was added.
+
+## 0.3.2 - SplitContainer initialization fix
+
+The right-side property inspector minimum width is no longer assigned unsafely during control construction.
+
+`Panel1MinSize`, `Panel2MinSize`, and `SplitterDistance` are calculated only after a usable docked size exists.
+
+This prevents startup/narrow-panel `InvalidOperationException` failures.
+
+## 0.3.3 - source highlighting and centered navigation
+
+- Clicking a diagram element navigates to the full source declaration.
+- The complete XML declaration is highlighted.
+- Source navigation centers the declaration approximately in the editor.
+- Navigation works on a single node click.
+- Compositor capsules continue to expand/collapse only.
+- UTF-8 byte positions are used for Scintilla compatibility.
+
+## 0.3.4 - English-only UI
+
+All plugin-owned user interface labels, toolbar actions, menu commands, status messages, and error messages are English-only.
+
+Text originating from the loaded XSD, such as `xs:documentation`, is displayed unchanged.
+
+## 0.4.0 - schema explorer features
+
+Version 0.4.0 expands the viewer into a broader XSD exploration tool while remaining read-only.
+
+Added:
+
+- grouped Component Browser:
+  - Elements
+  - Complex Types
+  - Simple Types
+  - Groups
+  - Attribute Groups
+  - Attributes
+  - Imports
+  - Includes
+- schema-wide search;
+- Back/Forward navigation;
+- breadcrumb navigation;
+- Go to type definition;
+- Used by navigation;
 - import/include dependency inspector;
 - validation Problems view;
 - occurrence badges;
 - documentation preview tooltip;
-- Copy schema path context action;
-- local imported XSD files can be opened in Notepad++ directly.
+- Copy schema path;
+- direct opening of local imported XSD files in Notepad++.
 
-The selected root/type still opens collapsed by default. Use the compositor/base capsules for manual expansion or **Expand all** to open the reachable graph.
+## 0.4.1 - diagram cleanup
 
+- Removed the mini-map because it did not provide enough practical value and consumed useful canvas space.
 
-## 0.4.1 diagram cleanup
+## 0.4.2 - required and optional elements
 
-The mini-map was removed from the diagram view because it did not provide enough practical value and occupied useful canvas space. All other 0.4.0 schema explorer features remain available.
+- Required elements use a solid border.
+- Optional elements (`minOccurs="0"`) use a dotted border.
+- Optional elements show an `optional` badge.
+- Every element shows an occurrence badge:
+  - `[1]`
+  - `[0..1]`
+  - `[1..*]`
+  - `[0..*]`
+- Badge space is reserved so long names remain inside the node.
 
+## 0.4.3 / 0.4.4 - vertical property sections
 
-## 0.4.2 required and optional elements
+The right-side inspector no longer uses tabs.
 
-Diagram nodes now distinguish XSD cardinality visually without relying on color:
+Property categories are shown as vertically stacked boxes.
 
-- required elements use a solid border;
-- optional elements (`minOccurs=0`) use a dotted border and an `optional` badge;
-- every node shows an occurrence badge (`[1]`, `[0..1]`, `[1..*]`, `[0..*]`);
-- badge space is reserved so long element/type names stay inside the node.
+- Empty boxes are hidden.
+- Each box can be collapsed independently.
+- Long content scrolls inside its own box.
+- The complete inspector column can scroll.
+- Visible boxes automatically share the available vertical space.
+- Section heights are no longer fixed.
 
-## 0.4.4 vertical property sections
-
-The right-side inspector no longer uses tabs. Property categories are displayed as separate vertically stacked boxes. Empty boxes are hidden, each box can be collapsed independently, long content scrolls inside its own box, and the complete inspector column remains scrollable.
-
-
-## 0.4.5 nested element search
+## 0.4.5 - nested element search
 
 - `Search schema` searches nested/local `xs:element` declarations in addition to global components and named types.
-- Nested results display their complete schema path.
-- Clicking a filtered nested element result opens the owning root element, expands the path down to the result, selects and centers the node, and jumps to/highlights the declaration in the Notepad++ source editor.
+- Nested results display the complete schema path.
+- Selecting a nested result opens the owning root element.
+- The path down to the result is automatically expanded.
+- The matching node is selected and centered.
+- The plugin jumps to and highlights the declaration in the Notepad++ source editor.
 - Optional element boxes use a dotted border.
+
+
+
+For an open-source release, verify that the selected license is compatible with all third-party components used by the project.
